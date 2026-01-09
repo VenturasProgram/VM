@@ -1,0 +1,645 @@
+import { app, BrowserWindow, protocol, Menu, shell } from 'electron';
+import path from 'node:path';
+const started = require('electron-squirrel-startup');
+import fs from 'fs';
+
+
+// Handle creating/removing shortcuts on Windows when installing/uninstalling.
+if (started) {
+  app.quit();
+}
+const isPackaged = app.isPackaged;
+
+const binPath = isPackaged ? path.join(process.resourcesPath, 'bin' ) : path.join(app.getAppPath(), 'bin');
+
+const musicPath = isPackaged ? path.join(process.resourcesPath, 'music' ) : path.join(app.getAppPath(), 'music');
+
+const coverPath = isPackaged ? path.join(process.resourcesPath, 'cache_cover' ) : path.join(app.getAppPath(), 'cache_cover');
+const histPath = isPackaged ? path.join(process.resourcesPath) : path.join(__dirname);
+const watchUserCss = (mainWindow) => {
+  fs.watch(externalCssPath, (eventType) => {
+    if (eventType === 'change') {
+      try {
+        const updatedStyle = fs.readFileSync(externalCssPath, 'utf-8');
+        mainWindow.webContents.send('update-user-css', updatedStyle);
+      } catch (error) {
+        console.error('Erro ao ler o arquivo CSS atualizado:', error);
+      }
+    }
+  })
+}
+
+const createWindow = () => {
+  // Create the browser window.
+  const mainWindow = new BrowserWindow({
+    width: 800,
+    height: 600,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+    },
+  });
+  mainWindow.webContents.on('did-finish-load', () => {
+    const userStyle = fs.readFileSync(externalCssPath, 'utf-8');
+    mainWindow.webContents.insertCSS(userStyle);
+  });
+  // and load the index.html of the app.
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`));
+  }
+  watchUserCss(mainWindow);
+  // Open the DevTools.
+  //mainWindow.webContents.openDevTools();
+};
+protocol.registerSchemesAsPrivileged([
+  {scheme: 'media', privileges: {secure:true, standard:true, supportFetchAPI: true}}
+]);
+
+const externalCssPath = path.join(process.resourcesPath, 'user-style.css');
+// This method will be called when Electron has finished
+// initialization and is ready to create browser windows.
+// Some APIs can only be used after this event occurs.
+app.whenReady().then(() => {
+  if (!fs.existsSync(externalCssPath)) {
+    const defaultStyle = `*{
+  overflow: hidden;
+}
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  margin: auto;
+  max-width: 38rem;
+  padding: 2rem;
+  background: rgba(1, 13, 35, 1);
+  color: white;
+}
+#background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url('https://i.pinimg.com/originals/79/82/a3/7982a35558b9c49bc2e2d169b2ac043b.gif');
+  filter: blur(5px);
+  z-index: -1;
+}
+/*Downloader de Musicas*/
+.Downloader{
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    background-color: #03223F;
+    padding: 30px;
+    border-radius: 0 15px 15px 15px;
+    z-index: 3;
+}
+.toggle-downloader-btn{
+    background: transparent;
+    border: none;
+    color:white;
+    position: absolute;
+    left: 15px;
+    top: 15px;
+    width: 40px;
+    height: 40px;
+    z-index: 4;
+    cursor: pointer;
+}
+.Barra_de_Link{
+    padding: 10px;
+    border-radius: 60px 0 0 60px;
+    border: none;
+    background: #053a6b;
+    color: #e2e2e2;
+}
+.Botão_Download{
+    padding: 10px;
+    border-radius: 0 60px 60px 0;
+    background-color: #e19f41;
+    color: white;
+    cursor: pointer;
+    transition: all 0.3s ease-in-out;
+}
+.Botão_Download:hover{
+    background-color: #FCCB6F;
+    color: black;
+}
+/*Biblioteca de Musicas*/
+.library-container{
+    position: absolute;
+    right: 0;
+    top: 0;
+    background-color: rgba(3, 34, 63, 0.7);
+    box-shadow: #03223F 0px 0px 20px 5px;
+    padding: 20px;
+    width: 30%;
+    height: 96%;
+    border-radius: 15px 0 0 15px;
+    z-index: 999;
+}
+.song-grid{
+    overflow-y: auto;
+    height: 89%;
+}
+.song-card{
+    border: 0px solid white;
+    display: flex;
+    margin-top: 30px;
+    margin-right: 70px;
+    margin-left: 30px;
+    transition: all 0.2s ease-in-out;
+    border-radius: 15px;
+}
+.song-card:hover{
+    transform: scale(1.1);
+    border: 3px solid white;
+    border-radius: 15px;
+    cursor: pointer;
+}
+.Capa-song{
+    width: 10rem;
+    height: 10rem;
+    border-radius: 15px;
+    object-fit: cover;
+    margin-right: 30px;
+}
+.Song-title{
+    width: 18rem;
+    font-size: 1.3rem;
+}
+.Song-Artista{
+    width: 18rem;
+}
+/*Player de Musicas*/
+.playerContainer{
+    width: 70%;
+    height: 100%;
+    position: absolute;
+    left: 0;
+    z-index: 2;
+}
+
+.visualizer-overlay {
+  max-width: 50vw;   /* Não ultrapassa a largura da tela */
+  max-height: 90vh;  /* Não ultrapassa a altura da tela */
+  width: auto;
+  height: auto;
+  aspect-ratio: 1 / 1; /* Garante que permaneça um círculo/quadrado */
+  cursor: pointer;
+}
+.capa-wrapper{
+   width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.info{
+    z-index: 2;
+}
+.playButton{
+    display: none;
+}
+.navButton.back{
+    position: absolute;
+    left: 14rem;
+    top: 25rem;
+    border: none;
+    background-color: #91662aff;
+    padding: 1.3rem;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    z-index: 4;
+    box-shadow: #91662aff 0px 0px 0px 0px;
+    transition: all 0.3s ease-in-out;
+}
+.bi-skip-backward-fill{
+    fill: black;
+    transition: all 0.3s ease-in-out;
+}
+.navButton.back:hover .bi-skip-backward-fill,
+.navButton.forw:hover .bi-skip-forward-fill{
+    fill: white;
+}
+.bi-skip-forward-fill{
+    fill: black;
+    transition: all 0.3s ease-in-out;
+}
+.navButton.back:hover {
+    background-color: #e19f41;
+    box-shadow: #e19f41 0px 0px 5px 7px;
+}
+.navButton.forw:hover {
+    background-color: #e19f41;
+    box-shadow: #e19f41 0px 0px 5px 7px;
+}
+.navButton.forw{
+    position: absolute;
+    right: 12rem;
+    top: 25rem;
+    border: none;
+    background-color: #91662aff;
+    padding: 1.3rem;
+    border-radius: 50%;
+    color: white;
+    cursor: pointer;
+    z-index: 4;
+    box-shadow: #91662aff 0px 0px 0px 0px;
+    transition: all 0.3s ease-in-out;
+}
+.progressArea{
+    width: 85rem;
+    margin-top: 1.3rem;
+    z-index: 2;
+    position: absolute;
+    bottom: 3rem;
+    margin-left: 12%;
+}
+.progressBar{
+    all:unset; /* limpa os estilos iniciais */
+     border: none;
+    display: inline-block;
+    height: 0.7rem;
+    width: 50rem;
+    border-radius: 1rem;
+    cursor: pointer;
+    margin: 1rem;
+    z-index: 2;
+}
+.progressBar::-webkit-slider-thumb{
+    -webkit-appearance: none;
+  appearance: none; 
+  height: 1.2rem;
+  width: 1.2rem;
+  background-color: #FCCB6F;
+  border-radius: 50%;
+  border: none;
+  transition: .2s ease-in-out;
+}
+.title{
+    position: absolute;
+    top: 0rem;
+    width: 100%;
+    text-align: center;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-top: 1.3rem;
+}
+.Cantor{
+    position: absolute;
+    top: 3rem;
+    width: 100%;
+    text-align: center;
+    font-size: 1.3rem;
+    margin-top: 1.3rem;
+    color: #CCCCCC;
+}
+#Aleatorio{
+    position: absolute;
+    bottom: 5rem;
+    left: 0rem;
+    background: transparent;
+    border: none;
+    margin-left: 1.3rem;
+    cursor: pointer;
+    width: 5rem;
+    height: 5rem;
+    transition: all 0.3s ease-in-out;
+}
+#Aleatorio:hover .bi-shuffle{
+    background-color: #e19f41;
+    box-shadow: #e19f41 0px 0px 5px 7px;
+}
+#Repetir{
+    position: absolute;
+    bottom: 5rem;
+    left: 5rem;
+    background: transparent;
+    border: none;
+    margin-left: 1.3rem;
+    cursor: pointer;
+    width: 5rem;
+    height: 5rem;
+    transition: all 0.3s ease-in-out;
+}
+.bi-repeat{
+    background-color: #91662aff;
+    padding: 0.6rem;
+    border-radius: 50%;
+    border: none;
+    width: 2rem;
+    height: 2rem;
+    fill: black;
+    transition: all 0.3s ease-in-out;
+}
+#Repetir:hover .bi-repeat{
+    background-color: #e19f41;
+    box-shadow: #e19f41 0px 0px 5px 7px;
+}
+.volumeControl{
+    position: absolute;
+    right: 3rem;
+    bottom: 7rem;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+}
+.bi-shuffle{
+    background-color: #91662aff;
+    padding: 0.6rem;
+    border-radius: 50%;
+    border: none;
+    width: 2rem;
+    height: 2rem;
+    fill: black;
+    transition: all 0.3s ease-in-out;
+}
+#Aleatorio.active .bi-shuffle{
+    background-color: #e19f41;
+    fill:white;
+}
+#Repetir.active .bi-repeat{
+    background-color: #e19f41;
+    fill:white;
+}
+.bi-volume{
+    fill: #e19f41;
+}
+.bi-volume.down{
+    fill: #91662aff;
+}
+.volumeBar{
+    all:unset; /* limpa os estilos iniciais */
+     border: none;
+    display: inline-block;
+    height: 0.55rem;
+    width: 75%;
+    border-radius: 1rem;
+    cursor: pointer;
+    margin: 1rem;
+    z-index: 2;
+}
+.volumeBar::-webkit-slider-thumb{
+    -webkit-appearance: none;
+  appearance: none; 
+  height: 1rem;
+  width: 1rem;
+  background-color: #FCCB6F;
+  border-radius: 50%;
+  border: none;
+  transition: .2s ease-in-out;
+}
+.volumeControl{
+    width: 13rem;
+}`;
+    fs.writeFileSync(externalCssPath, defaultStyle, 'utf-8');
+  }
+  protocol.registerFileProtocol('media', (request, callback) => {
+  // 1. Remove o protocolo media://
+  let filePath = request.url.replace('media://', '');
+  
+  // 2. Decodifica os espaços e caracteres especiais (ex: %20 -> " ")
+  filePath = decodeURIComponent(filePath);
+
+  try {
+    // 3. Limpeza para Windows
+    // Se a URL vier como media://D:/... o request.url vira "D:/..."
+    // Se vier como media:///D:/... o request.url vira "/D:/..."
+    // Precisamos garantir que não haja uma barra antes da letra do drive
+    if (process.platform === 'win32') {
+      // Remove a barra inicial se houver (/D:/projeto -> D:/projeto)
+      if (filePath.startsWith('/')) {
+        filePath = filePath.substring(1);
+      }
+    }
+
+    // 4. Normaliza as barras para o padrão do sistema (\ no Windows)
+    const absolutePath = path.normalize(filePath);
+    
+    // LOG DE DEBUG - Verifique isso no terminal do VS Code!
+    console.log("Protocolo Media tentando ler:", absolutePath);
+
+    return callback({ path: absolutePath });
+  } catch (error) {
+    console.error('Falha no protocolo media:', error);
+    return callback({ error: -6 }); // Erro de arquivo não encontrado
+  }
+});
+  createWindow();
+
+  // On OS X it's common to re-create a window in the app when the
+  // dock icon is clicked and there are no other windows open.
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
+});
+
+// Quit when all windows are closed, except on macOS. There, it's common
+// for applications and their menu bar to stay active until the user quits
+// explicitly with Cmd + Q.
+app.on('window-all-closed', () => {
+  limparCacheCover();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+const limparCacheCover = () => {
+    try {
+      if (fs.existsSync(coverPath)) {
+        const files = fs.readdirSync(coverPath);
+        for (const file of files) {
+          const filePath = path.join(coverPath, file);
+          if (fs.statSync(filePath).isFile()) {
+            fs.unlinkSync(filePath);
+          }
+        }
+        console.log("Cache de capas limpo com sucesso.");
+      }
+    } catch (err) {
+      console.error("Erro ao limpar cache de capas:", err);
+    }
+  }
+
+// In this file you can include the rest of your app's specific main process
+// code. You can also put them in separate files and import them here.
+
+
+const {ipcMain} = require('electron');
+const {spawn} = require('child_process');
+
+[musicPath, coverPath].forEach(dir => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log("Pasta criada:", dir);
+  }
+});
+
+ipcMain.handle('download-music', async (event, url) => {
+
+  console.log("Recebido pedido para baixar:", url);
+  const ytDlpPath = path.join(binPath, 'yt-dlp.exe');console.log(ytDlpPath);
+  const ffmpegPath = path.join(binPath, 'ffmpeg.exe');console.log(ffmpegPath);
+  const outputPath = path.join(musicPath, '%(title)s.%(ext)s');
+
+  return new Promise((resolve, reject) => {
+    const process = spawn(ytDlpPath, [
+      '-x',
+      '--audio-format', 'mp3',
+      '--ffmpeg-location', ffmpegPath,
+      '-o', outputPath,
+      '--embed-metadata', // Coloca título/artista no arquivo
+      '--embed-thumbnail', // Coloca a capa do vídeo como capa do MP3
+      '--newline',
+      url
+    ]);
+
+    process.stdout.on('data', (data) => {
+      const output = data.toString();
+      // Regex para encontrar a porcentagem no padrão do yt-dlp: [download]  45.2% of ...
+      const match = output.match(/(\d+\.\d+)%/);
+      
+      if (match) {
+        const percent = parseFloat(match[1]);
+        // Envia o progresso para a janela do React
+        event.sender.send('download-progress', percent);
+      }
+      console.log(`Logs: ${output}`);
+    });
+
+    process.on('close', (code) => {
+      if (code === 0){
+        salvarHistorico(url);
+        event.sender.send('get-library');
+        resolve(musicPath);
+      }
+      else{ reject(`Erro: ${code}`);}
+    });
+  })
+});
+
+const mm = require('music-metadata');
+
+ipcMain.handle('get-library', async () => {
+  if (!fs.existsSync(musicPath)) return [];
+
+  const files = fs.readdirSync(musicPath);
+  const musicData = [];
+
+  for (const file of files) {
+    if (file.toLowerCase().endsWith('.mp3')) {
+      const filePath = path.join(musicPath, file);
+      try {
+        const metadata = await mm.parseFile(filePath);
+        const coverFileName = `${path.parse(file).name}.jpg`;
+        const absoluteCoverPath = path.join(coverPath, coverFileName);
+        const coverFilePath_library = path.join('cache_cover', coverFileName);
+
+        if (!fs.existsSync(absoluteCoverPath) && metadata.common.picture) {
+          fs.writeFileSync(absoluteCoverPath, metadata.common.picture[0].data);
+        }
+
+        musicData.push({
+          id: file,
+          title: metadata.common.title || file,
+          artist: metadata.common.artist || 'Desconhecido',
+          path: filePath,
+          player: absoluteCoverPath, // Caminho absoluto para o protocolo media://
+          library: coverFilePath_library
+        });
+      } catch (err) {
+        console.error("Erro no arquivo:", file, err);
+      }
+    }
+  }
+  return musicData;
+});
+
+const salvarHistorico = (url) => {
+  const filePath = path.join(histPath, 'hist.json');
+  let historico = [];
+
+  if (fs.existsSync(filePath)){
+    const data = fs.readFileSync(filePath, 'utf8');
+    historico = JSON.parse(data);
+  }
+
+  historico.push({
+    url:url,
+    data: new Date().toLocaleString()
+  });
+
+  fs.writeFileSync(filePath, JSON.stringify(historico, null, 2));
+  console.log("Link salvo no Histórico:", filePath);
+}
+const { Client } = require('@xhayper/discord-rpc');
+const client = new Client({ clientId: '1457877451492294789' });
+
+client.on('ready', () => {
+    console.log('✅ Conectado via xhayper/discord-rpc');
+});
+
+// A vantagem desta biblioteca é que ela gerencia a reconexão muito melhor
+client.login().catch(console.error);
+
+ipcMain.on('canal-discord', (event, dados) => {
+    if (client.user) { // Verifica se está logado
+        client.user.setActivity({
+            details: dados.title,
+            state: `por ${dados.artist}`,
+            type: 2,
+            largeImageKey: `https://i.pinimg.com/originals/8a/b4/31/8ab431112b123209806680d879cbd26f.gif`,
+            instance: false
+        });
+    }
+});
+
+ipcMain.on('show-context-menu', (event, {index, filePath}) => {
+  const template = [
+    {
+      label: 'Tocar Música',
+      click: () => { event.sender.send('menu-play-song', index);}
+    },
+    { type: 'separator' },
+    {
+      label: 'Mostrar na Pasta',
+      click: () => {
+        if (fs.existsSync(filePath)){
+          shell.showItemInFolder(filePath);
+        } else {
+          console.error("Arquivo não encontrado para mostrar na pasta:", filePath);
+        }
+      }
+    },
+    {
+      label: 'Apagar Música',
+      click: () => {
+        try{
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            event.sender.send('library-updated');
+          }
+        } catch (err) {
+          console.error("Erro ao apagar música:", err);
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Editar Aparencia (CSS)',
+      click: () => {
+        shell.openPath(externalCssPath);
+      }
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  menu.popup(BrowserWindow.fromWebContents(event.sender));
+})
