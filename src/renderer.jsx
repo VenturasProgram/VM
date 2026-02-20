@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Center } from './components/Center/Center'
 
+
 import './index.css'
 
     

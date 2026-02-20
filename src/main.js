@@ -3,6 +3,13 @@ import path from 'node:path';
 const started = require('electron-squirrel-startup');
 import fs from 'fs';
 
+if (process.defaultApp) {
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('vm', process.execPath, [path.resolve(process.argv[1])]);
+  }
+} else {
+  app.setAsDefaultProtocolClient('vm');
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -28,16 +35,46 @@ const watchUserCss = (mainWindow) => {
     }
   })
 }
+ let ytMusicWindow = null;
+const YoutubeMusicWindow = () => {
+  if (ytMusicWindow) {
+    ytMusicWindow.focus();
+    return;
+  }
+   ytMusicWindow = new BrowserWindow({
+    width: 1200, 
+    height: 800, 
+    titleBarStyle: 'default', 
+    autoHideMenuBar:true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      partition: 'persist:ytmusic', // Isola os cookies/cache do YouTube Music do restante do app
 
+      preload: path.join(__dirname, 'Copy.js') // Preload para comunicação segura
+    }
+  });
+  ytMusicWindow.loadURL('https://music.youtube.com/', {userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'});
+
+  // Limpa a referência quando a janela for fechada manualmente
+  ytMusicWindow.on('closed', () => {
+    ytMusicWindow = null;
+  });
+}
+let mainWindow = null;
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
+    titleBarStyle: 'hidden'
   });
+  mainWindow.maximize();
+  mainWindow.show();
+
   mainWindow.webContents.on('did-finish-load', () => {
     const userStyle = fs.readFileSync(externalCssPath, 'utf-8');
     mainWindow.webContents.insertCSS(userStyle);
@@ -55,6 +92,34 @@ const createWindow = () => {
 protocol.registerSchemesAsPrivileged([
   {scheme: 'media', privileges: {secure:true, standard:true, supportFetchAPI: true}}
 ]);
+let downloadWindow = null;
+
+const createDownloadWindow = () => {
+  if (downloadWindow) {
+    downloadWindow.focus();
+    return;
+  }
+
+  downloadWindow = new BrowserWindow({
+    width: 350,
+    height: 180,
+    resizable: false,
+    frame: true, 
+    autoHideMenuBar: true,
+    webPreferences: {
+      // Importante: use o mesmo preload para as funções de progresso funcionarem
+      preload: path.join(__dirname, 'preload.js'),
+    }
+  });
+
+  // Carrega o arquivo HTML puro
+  // Se o arquivo estiver na mesma pasta do main.js:
+  downloadWindow.loadFile(path.join(__dirname, 'download-status.html'));
+
+  downloadWindow.on('closed', () => {
+    downloadWindow = null;
+  });
+};
 
 const externalCssPath = path.join(process.resourcesPath, 'user-style.css');
 // This method will be called when Electron has finished
@@ -66,6 +131,7 @@ app.whenReady().then(() => {
   overflow: hidden;
 }
 body {
+  padding-top: 35px;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
@@ -86,47 +152,19 @@ body {
   z-index: -1;
 }
 /*Downloader de Musicas*/
-.Downloader{
-    position: absolute;
-    left: 0;
-    top: 0;
-    z-index: 1000;
-    background-color: #03223F;
-    padding: 30px;
-    border-radius: 0 15px 15px 15px;
-    z-index: 3;
-}
 .toggle-downloader-btn{
     background: transparent;
     border: none;
     color:white;
     position: absolute;
     left: 15px;
-    top: 15px;
+    top: 35px;
     width: 40px;
     height: 40px;
-    z-index: 4;
+    z-index: 99;
     cursor: pointer;
 }
-.Barra_de_Link{
-    padding: 10px;
-    border-radius: 60px 0 0 60px;
-    border: none;
-    background: #053a6b;
-    color: #e2e2e2;
-}
-.Botão_Download{
-    padding: 10px;
-    border-radius: 0 60px 60px 0;
-    background-color: #e19f41;
-    color: white;
-    cursor: pointer;
-    transition: all 0.3s ease-in-out;
-}
-.Botão_Download:hover{
-    background-color: #FCCB6F;
-    color: black;
-}
+
 /*Biblioteca de Musicas*/
 .library-container{
     position: absolute;
@@ -142,7 +180,7 @@ body {
 }
 .song-grid{
     overflow-y: auto;
-    height: 89%;
+    height: 85%;
 }
 .song-card{
     border: 0px solid white;
@@ -396,7 +434,100 @@ body {
 }
 .volumeControl{
     width: 13rem;
-}`;
+}
+    
+/*Controladores do aplicativo*/
+.titleBar{ 
+    height: 35px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    user-select: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+}
+.buttonGroup_windowControls {
+    position: absolute;
+    right: 0;
+    display: flex;
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+.buttonGroup_windowControls button {
+    width: 45px;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.closeButton:hover {
+    background-color: #E81123;
+}
+
+.window-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+.artists{
+    overflow-y: auto;
+    height: 85%;
+    padding: auto;
+}
+.artist-card{
+    border: 0px solid white;
+    transition: all 0.2s ease-in-out;
+    border-radius: 15px;
+}
+.artist-card:hover{
+    transform: scale(1.1);
+    border: 3px solid white;
+    border-radius: 15px;
+    cursor: pointer;
+}
+.artist_songs{
+    overflow-y: auto;
+    height: 70%;
+    position: absolute;
+    top: 12%;
+}
+.Button-tabs{
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  justify-content: space-between;
+  width: 50%;
+  margin: auto;
+  margin-bottom: 20px;
+}
+.Button-tabs button {
+  padding: 20px;
+  border-radius: 60px;
+  border: none;
+  background: #424242;
+  color: #e2e2e2;
+  cursor: pointer;
+  font-size: 16px;
+  color: white;
+  transition: all 0.3s ease-in-out;
+}
+.Button-tabs .active-tab{
+    background: #e19f41;
+    color: rgb(0, 0, 0);
+}
+.playlists-section{
+    position: absolute;
+    top: 15%;
+    width: 90%;
+    height: 85%;
+    overflow-y: auto;
+}
+`;
     fs.writeFileSync(externalCssPath, defaultStyle, 'utf-8');
   }
   protocol.registerFileProtocol('media', (request, callback) => {
@@ -431,6 +562,13 @@ body {
   }
 });
   createWindow();
+  if (process.platform === 'win32') {
+    const url = process.argv.find(arg => arg.startsWith('vm://'));
+    if (url) {
+      // Pequeno delay para garantir que a janela carregou
+      setTimeout(() => processarUrlProtocolo(url), 2000);
+    }
+  }
 
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
@@ -481,12 +619,18 @@ const {spawn} = require('child_process');
     console.log("Pasta criada:", dir);
   }
 });
-
-ipcMain.handle('download-music', async (event, url) => {
-
+function baixarMusica(url, mainWindowSender) {
   console.log("Recebido pedido para baixar:", url);
-  const ytDlpPath = path.join(binPath, 'yt-dlp.exe');console.log(ytDlpPath);
-  const ffmpegPath = path.join(binPath, 'ffmpeg.exe');console.log(ffmpegPath);
+
+  if (ytMusicWindow) {
+    ytMusicWindow.close();
+  }
+
+  // ABRIR A NOVA JANELA DE DOWNLOAD
+  createDownloadWindow();
+
+  const ytDlpPath = path.join(binPath, 'yt-dlp.exe');
+  const ffmpegPath = path.join(binPath, 'ffmpeg.exe');
   const outputPath = path.join(musicPath, '%(title)s.%(ext)s');
 
   return new Promise((resolve, reject) => {
@@ -495,34 +639,59 @@ ipcMain.handle('download-music', async (event, url) => {
       '--audio-format', 'mp3',
       '--ffmpeg-location', ffmpegPath,
       '-o', outputPath,
-      '--embed-metadata', // Coloca título/artista no arquivo
-      '--embed-thumbnail', // Coloca a capa do vídeo como capa do MP3
+      '--embed-metadata',
+      '--embed-thumbnail',
       '--newline',
       url
     ]);
 
     process.stdout.on('data', (data) => {
       const output = data.toString();
-      // Regex para encontrar a porcentagem no padrão do yt-dlp: [download]  45.2% of ...
       const match = output.match(/(\d+\.\d+)%/);
       
       if (match) {
         const percent = parseFloat(match[1]);
-        // Envia o progresso para a janela do React
-        event.sender.send('download-progress', percent);
+        
+        // ENVIAR O PROGRESSO PARA A JANELA DE DOWNLOAD (se ela existir)
+        if (downloadWindow) {
+          downloadWindow.webContents.send('download-progress', percent);
+        }
       }
       console.log(`Logs: ${output}`);
     });
 
     process.on('close', (code) => {
-      if (code === 0){
+      if (code === 0) {
         salvarHistorico(url);
-        event.sender.send('get-library');
+        
+        // Avisa a janela de download que acabou (para mostrar 100% ou fechar)
+        if (downloadWindow) {
+           downloadWindow.webContents.send('download-finalizado');
+           
+           // Opcional: Fechar a janela de download automaticamente após 2 segundos
+           setTimeout(() => {
+             if (downloadWindow) downloadWindow.close();
+           }, 2000);
+        }
+
+        // Avisa a JANELA PRINCIPAL para atualizar a lista
+        // (Usamos o mainWindowSender que foi passado como argumento)
+        if (mainWindowSender) {
+            mainWindowSender.send('library-updated');
+        }
+        
         resolve(musicPath);
+      } else {
+        if (downloadWindow) downloadWindow.webContents.send('download-error', `Erro: ${code}`);
+        reject(`Erro: ${code}`);
       }
-      else{ reject(`Erro: ${code}`);}
     });
-  })
+  });
+}
+
+ipcMain.handle('download-music', async (event, url) => {
+  // Passamos o event.sender (que é a janela que clicou no botão)
+  return baixarMusica(url, event.sender);
 });
 
 const mm = require('music-metadata');
@@ -560,6 +729,9 @@ ipcMain.handle('get-library', async () => {
     }
   }
   return musicData;
+});
+ipcMain.handle('Youtube-Music', () => {
+  YoutubeMusicWindow();
 });
 
 const salvarHistorico = (url) => {
@@ -601,45 +773,104 @@ ipcMain.on('canal-discord', (event, dados) => {
     }
 });
 
-ipcMain.on('show-context-menu', (event, {index, filePath}) => {
+// --- MENU DE CONTEXTO (ATUALIZADO COM PLAYLISTS) ---
+ipcMain.on('show-context-menu', (event, { songId, filePath, playlists, index }) => {
   const template = [
     {
       label: 'Tocar Música',
-      click: () => { event.sender.send('menu-play-song', index);}
+      click: () => { event.sender.send('menu-play-song', index !== undefined ? index : songId); }
+    },
+    { type: 'separator' },
+    {
+      label: 'Adicionar à Playlist...',
+      enabled: playlists && playlists.length > 0,
+      submenu: playlists ? playlists.map(pl => ({
+        label: pl.name,
+        click: () => { event.sender.send('add-to-playlist', { playlistId: pl.id, songId: songId }); }
+      })) : []
     },
     { type: 'separator' },
     {
       label: 'Mostrar na Pasta',
-      click: () => {
-        if (fs.existsSync(filePath)){
-          shell.showItemInFolder(filePath);
-        } else {
-          console.error("Arquivo não encontrado para mostrar na pasta:", filePath);
-        }
-      }
+      click: () => { if (fs.existsSync(filePath)) shell.showItemInFolder(filePath); }
     },
     {
       label: 'Apagar Música',
       click: () => {
-        try{
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            event.sender.send('library-updated');
-          }
-        } catch (err) {
-          console.error("Erro ao apagar música:", err);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+          event.sender.send('library-updated');
         }
       }
     },
     { type: 'separator' },
     {
-      label: 'Editar Aparencia (CSS)',
-      click: () => {
-        shell.openPath(externalCssPath);
-      }
+      label: 'Editar Aparência (CSS)',
+      click: () => { shell.openPath(externalCssPath); }
     }
   ];
 
   const menu = Menu.buildFromTemplate(template);
   menu.popup(BrowserWindow.fromWebContents(event.sender));
-})
+});
+// Este listener recebe o grito do Copy.js
+ipcMain.on('url-detectada-pelo-copy', (event, url) => {
+    if (ytMusicWindow) ytMusicWindow.close();
+
+    if (mainWindow) {
+        // Forçamos o foco na janela principal para o usuário ver o progresso
+        mainWindow.focus(); 
+        
+        baixarMusica(url, mainWindow.webContents)
+            .then(() => {
+                // Forçamos uma atualização extra por segurança
+                mainWindow.webContents.send('library-updated');
+            })
+            .catch(err => console.error("Falha ao iniciar download:", err));
+    }
+});
+
+ipcMain.on('window-minimize', () => mainWindow.minimize());
+ipcMain.on('window-close', () => mainWindow.close());
+
+// Função auxiliar para processar a URL do protocolo
+function processarUrlProtocolo(url) {
+  try {
+    const urlObj = new URL(url);
+    // Se o formato for meu-player-musica://download?url=https://youtube.com...
+    if (urlObj.hostname === 'download') {
+      const musicUrl = urlObj.searchParams.get('url');
+      if (musicUrl && mainWindow) {
+        mainWindow.focus();
+        baixarMusica(musicUrl, mainWindow.webContents);
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao processar URL do protocolo:', e);
+  }
+}
+
+// Para Windows (Segunda Instância)
+const gotTheLock = app.requestSingleInstanceLock();
+
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, commandLine) => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    // No Windows, a URL completa está nos argumentos
+    const url = commandLine.pop();
+    if (url.includes('vm://')) {
+      processarUrlProtocolo(url);
+    }
+  });
+}
+//vm://download?url=
+// Para macOS
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  processarUrlProtocolo(url);
+});

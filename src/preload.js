@@ -18,7 +18,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   AtualizarDiscord: (dados) => ipcRenderer.send('canal-discord', dados),
 
   showContextMenu: (data) => ipcRenderer.send('show-context-menu', data),
+  onAddToPlaylist: (callback) => {
+    // Removemos ouvintes antigos para evitar duplicatas ao recarregar componentes
+    ipcRenderer.removeAllListeners('add-to-playlist'); // Limpa duplicados
+    ipcRenderer.on('add-to-playlist', (_event, data) => callback(data));
+},
 
   onMenuPlay:(callback) => ipcRenderer.on('menu-play-song', (event, index) => callback(index)),
   onUpdateCss: (callback) => ipcRenderer.on('update-user-css', (event, css) => callback(css)),
+  openYoutubeMusic: () => ipcRenderer.invoke('Youtube-Music'),
+
+  minimize: () => ipcRenderer.send('window-minimize'),
+  close: () => ipcRenderer.send('window-close'),
+  onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (event, value) => callback(value)),
+  onDownloadFinalizado: (callback) => ipcRenderer.on('download-finalizado', (event) => callback())
 });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { Library } from '../Library/Library'
 import { Player } from '../Player/Player'
 import { Downloader } from '../Downloader/Downloader'
+import { WindowControls } from '../controls_page/controls'
 
 const sanitizeFileName = (name) => {
     if (!name) return "";
@@ -30,12 +31,6 @@ export const Center = () => {
 
     const isPlayerOpen = currentIndex !== null;
     useEffect(() => {
-        const carregarCssInicial = async () => {
-            const css = await window.electronAPI.getUserCss();
-            setUserCss(css);
-        };
-        carregarCssInicial();
-
         window.electronAPI.onUpdateCss((css) => {
             setUserCss(css);
         });
@@ -108,18 +103,16 @@ export const Center = () => {
         <>
         <style>{userCss}</style>
         <div id="background"></div>
+        <WindowControls />
         <div className='app-container'>
             {/* 2. Botão com o ícone para abrir/fechar */}
 <button 
-    onClick={toggleDownloader} 
+    onClick={window.electronAPI.openYoutubeMusic} 
     className="toggle-downloader-btn"
->
-    {isDownloaderVisible ? (<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" className="bi bi-x-lg" viewBox="0 0 16 16">
-        <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/>
-    </svg>) : (<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" className="bi bi-download" viewBox="0 0 16 16">
-        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
-        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
-    </svg>)}
+>   <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+    <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+    <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
+    </svg>
 </button>
 
             {/* 3. Renderização condicional do Downloader */}

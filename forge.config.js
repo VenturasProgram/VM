@@ -50,6 +50,16 @@ module.exports = {
             config: 'vite.preload.config.mjs',
             target: 'preload',
           },
+          {
+            entry: 'src/Copy.js',
+            config: 'vite.copy.config.mjs',
+            target: 'preload',
+          },
+          {
+            entry: 'download-status.html',
+            config: 'vite.download.config.mjs',
+            target: 'preload',
+          }
         ],
         renderer: [
           {

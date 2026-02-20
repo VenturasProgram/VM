@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Baixando...</title>
+    <style>
+        body {
+            background: #010d23;
+            color: white;
+            font-family: sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .container { width: 80%; }
+        .bar-bg {
+            background: rgba(255,255,255,0.1);
+            height: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+        .bar-fill {
+            background: #e19f41;
+            height: 100%;
+            width: 0%;
+            border-radius: 5px;
+            transition: width 0.3s;
+        }
+        .status { font-size: 14px; color: #e19f41; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="status-text">Iniciando...</div>
+        <div class="bar-bg"><div id="progress-fill" class="bar-fill"></div></div>
+        <div class="status" id="percent">0%</div>
+    </div>
+
+    <script>
+        // Escuta os eventos direto do Preload
+        window.electronAPI.onDownloadProgress((valor) => {
+            document.getElementById('progress-fill').style.width = valor + '%';
+            document.getElementById('percent').innerText = valor.toFixed(1) + '%';
+            document.getElementById('status-text').innerText = 'Baixando música...';
+        });
+
+        window.electronAPI.onDownloadFinalizado(() => {
+            document.getElementById('progress-fill').style.width = '100%';
+            document.getElementById('percent').innerText = '100%';
+            document.getElementById('status-text').innerText = 'Concluído!';
+        });
+    </script>
+</body>
+</html>
