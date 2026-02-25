@@ -1,17 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Visualizar } from '../../Visualizer/Visualizar';
 
-export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffle, toggleShuffle }) {
+export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffle, toggleShuffle,onPlayStateChange,Time, Repeat }) {
     const audioRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [audioData, setAudioData] = useState(new Uint8Array(0));
+    const [isMetadataLoaded, setIsMetadataLoaded] = useState(false);
 
     // NOVOS ESTADOS
     const [volume, setVolume] = useState(1); // 0 a 1
     const [repeatMode, setRepeatMode] = useState('none'); // 'none' | 'one'
-
+    
     const analyzerRef = useRef(null);
     const animationRef = useRef(null);
     const audioContextRef = useRef(null);
@@ -51,12 +52,17 @@ export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffl
         };
     }, [src]);
 
+    useEffect(() => {
+        setIsMetadataLoaded(false);
+    }, [src]);
     // --- LÓGICA DE CONTROLE ---
 
     const togglePlayPause = () => {
         if (isPlaying) audioRef.current.pause();
         else audioRef.current.play();
         setIsPlaying(!isPlaying);
+        onPlayStateChange(!isPlaying);
+        
     };
 
     const handleVolumeChange = (e) => {
@@ -66,20 +72,27 @@ export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffl
     };
     // Dentro do seu componente Player
         useEffect(() => {
-            if (trackTitle && window.electronAPI.AtualizarDiscord) {
-                console.log("Enviando para o Discord:", trackTitle);
+            // Só envia se tiver título E os metadados (duração) já carregaram
+            if (trackTitle && isMetadataLoaded && window.electronAPI.AtualizarDiscord) {
+                
                 window.electronAPI.AtualizarDiscord({
                     title: trackTitle,
                     artist: cantor,
-                    img: capa
+                    img: capa,
+                    // Pegamos o valor direto do ref para garantir precisão
+                    currentTime: audioRef.current ? audioRef.current.currentTime : 0,
+                    duration: audioRef.current ? audioRef.current.duration : 0,
+                    time_duration: duration,
+                    isPaused: !isPlaying
                 });
             }
-        }, [trackTitle, cantor, capa]); // Toca sempre que a música mudar
+        }, [trackTitle, isPlaying, isMetadataLoaded]); // Agora depende de isMetadataLoaded
 
     const handleSongEnd = () => {
         if (repeatMode === 'one') {
             audioRef.current.currentTime = 0;
             audioRef.current.play();
+            Time(0);
         } else {
             onNext(); // O componente pai deve lidar com o Shuffle se isShuffle estiver ativo
         }
@@ -99,8 +112,14 @@ export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffl
                 ref={audioRef} 
                 src={src} 
                 crossOrigin="anonymous"
-                onTimeUpdate={() => setCurrentTime(audioRef.current.currentTime)} 
-                onLoadedMetadata={() => setDuration(audioRef.current.duration)}
+                onTimeUpdate={() => {setCurrentTime(audioRef.current.currentTime);
+                    if (Time) Time(audioRef.current.currentTime); 
+                    
+                }} 
+                onLoadedMetadata={() => {
+                    setDuration(audioRef.current.duration);
+                    setIsMetadataLoaded(true);
+                }}
                 onEnded={handleSongEnd}
             />
 
@@ -155,7 +174,9 @@ export function Player({ src, trackTitle, onNext, onPrev, capa, cantor, isShuffl
                         min="0" 
                         max={duration || 0} 
                         value={currentTime} 
-                        onChange={(e) => audioRef.current.currentTime = e.target.value}
+                        onChange={(e) => {audioRef.current.currentTime = e.target.value;
+                            Time(e.target.value);
+                        }}
                         className='progressBar'
                         style={{
                             background: `linear-gradient(to right, #E19F41 0%, #E19F41 ${percentual}%, #00050e ${percentual}%, #00050e 100%)`

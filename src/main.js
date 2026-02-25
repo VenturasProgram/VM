@@ -21,6 +21,8 @@ const binPath = isPackaged ? path.join(process.resourcesPath, 'bin' ) : path.joi
 
 const musicPath = isPackaged ? path.join(process.resourcesPath, 'music' ) : path.join(app.getAppPath(), 'music');
 
+const videoPath = isPackaged ? path.join(process.resourcesPath, 'videos' ) : path.join(app.getAppPath(), 'videos');
+
 const coverPath = isPackaged ? path.join(process.resourcesPath, 'cache_cover' ) : path.join(app.getAppPath(), 'cache_cover');
 const histPath = isPackaged ? path.join(process.resourcesPath) : path.join(__dirname);
 const watchUserCss = (mainWindow) => {
@@ -59,6 +61,39 @@ const YoutubeMusicWindow = () => {
   // Limpa a referência quando a janela for fechada manualmente
   ytMusicWindow.on('closed', () => {
     ytMusicWindow = null;
+  });
+}
+let YtWindow = null;
+const createYtWindow = (songName = "") => {
+  if (YtWindow) {
+    YtWindow.focus();
+    return;
+  }
+    YtWindow = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    titleBarStyle: 'default',
+    autoHideMenuBar:true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      partition: 'persist:youtube', // Isola os cookies/cache do YouTube do restante do app
+
+      preload: path.join(__dirname, 'Copy Youtube.js') // Preload para comunicação segura
+    }
+  });
+  const baseURL = 'https://www.youtube.com/';
+  const finalURL = songName 
+    ? `${baseURL}results?search_query=${encodeURIComponent(songName)}` 
+    : baseURL;
+
+  YtWindow.loadURL(finalURL, {
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+  });
+
+  // Limpa a referência quando a janela for fechada manualmente
+  YtWindow.on('closed', () => {
+    YtWindow = null;
   });
 }
 let mainWindow = null;
@@ -141,6 +176,18 @@ body {
   background: rgba(1, 13, 35, 1);
   color: white;
 }
+#video-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover; /* Faz o vídeo cobrir a tela sem distorcer */
+  z-index: -2; /* Atrás do overlay de blur e do conteúdo */
+  filter: blur(5px); /* Aplica o efeito de desfoque */
+  pointer-events: none;
+}
+
 #background {
   position: fixed;
   top: 0;
@@ -151,6 +198,7 @@ body {
   filter: blur(5px);
   z-index: -1;
 }
+
 /*Downloader de Musicas*/
 .toggle-downloader-btn{
     background: transparent;
@@ -613,7 +661,7 @@ const limparCacheCover = () => {
 const {ipcMain} = require('electron');
 const {spawn} = require('child_process');
 
-[musicPath, coverPath].forEach(dir => {
+[musicPath, coverPath, videoPath].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
     console.log("Pasta criada:", dir);
@@ -676,11 +724,66 @@ function baixarMusica(url, mainWindowSender) {
 
         // Avisa a JANELA PRINCIPAL para atualizar a lista
         // (Usamos o mainWindowSender que foi passado como argumento)
-        if (mainWindowSender) {
+        if (mainWindowSender && !mainWindowSender.isDestroyed()) {
             mainWindowSender.send('library-updated');
         }
         
         resolve(musicPath);
+      } else {
+        if (downloadWindow) downloadWindow.webContents.send('download-error', `Erro: ${code}`);
+        reject(`Erro: ${code}`);
+      }
+    });
+  });
+}
+function baixarVideo(url, customName, mainWindowSender) {
+  console.log("Baixando VÍDEO de:", url, "com nome:", customName);
+
+  if (YtWindow) YtWindow.close(); // Fecha a janela do YT ao iniciar
+  createDownloadWindow();
+
+  const ytDlpPath = path.join(binPath, 'yt-dlp.exe');
+  const ffmpegPath = path.join(binPath, 'ffmpeg.exe');
+
+  // Lógica de renomeação:
+  // Se customName for "MinhaMusica.mp3", vira "MinhaMusica"
+  const fileNameWithoutExt = customName ? path.parse(customName).name : '%(title)s';
+  const outputPath = path.join(videoPath, `${fileNameWithoutExt}.%(ext)s`);
+
+  return new Promise((resolve, reject) => {
+    const process = spawn(ytDlpPath, [
+      '--ffmpeg-location', ffmpegPath,
+      '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+      '-o', outputPath,
+      '--newline',
+      url
+    ]);
+
+    process.stdout.on('data', (data) => {
+      const output = data.toString();
+      const match = output.match(/(\d+\.\d+)%/);
+      if (match && downloadWindow) {
+        downloadWindow.webContents.send('download-progress', parseFloat(match[1]));
+      }
+    });
+
+    process.on('close', (code) => {
+      if (code === 0) {
+        if (downloadWindow) {
+           downloadWindow.webContents.send('download-finalizado');
+           
+           // Opcional: Fechar a janela de download automaticamente após 2 segundos
+           setTimeout(() => {
+             if (downloadWindow) downloadWindow.close();
+           }, 2000);
+        }
+
+        // Avisa a JANELA PRINCIPAL para atualizar a lista
+        // (Usamos o mainWindowSender que foi passado como argumento)
+        if (mainWindowSender && !mainWindowSender.isDestroyed()) {
+            mainWindowSender.send('library-updated');
+        }
+        resolve(videoPath);
       } else {
         if (downloadWindow) downloadWindow.webContents.send('download-error', `Erro: ${code}`);
         reject(`Erro: ${code}`);
@@ -711,6 +814,10 @@ ipcMain.handle('get-library', async () => {
         const absoluteCoverPath = path.join(coverPath, coverFileName);
         const coverFilePath_library = path.join('cache_cover', coverFileName);
 
+        const videoFileName = `${path.parse(file).name}.mp4`;
+        const absoluteVideoPath = path.join(videoPath, videoFileName);
+        const hasVideo = fs.existsSync(absoluteVideoPath);
+
         if (!fs.existsSync(absoluteCoverPath) && metadata.common.picture) {
           fs.writeFileSync(absoluteCoverPath, metadata.common.picture[0].data);
         }
@@ -721,7 +828,8 @@ ipcMain.handle('get-library', async () => {
           artist: metadata.common.artist || 'Desconhecido',
           path: filePath,
           player: absoluteCoverPath, // Caminho absoluto para o protocolo media://
-          library: coverFilePath_library
+          library: coverFilePath_library,
+          videoPath: hasVideo ? absoluteVideoPath : null
         });
       } catch (err) {
         console.error("Erro no arquivo:", file, err);
@@ -732,6 +840,10 @@ ipcMain.handle('get-library', async () => {
 });
 ipcMain.handle('Youtube-Music', () => {
   YoutubeMusicWindow();
+});
+
+ipcMain.handle('download-video', async (event, { url, fileName }) => {
+  return baixarVideo(url, fileName, event.sender);
 });
 
 const salvarHistorico = (url) => {
@@ -762,17 +874,38 @@ client.on('ready', () => {
 client.login().catch(console.error);
 
 ipcMain.on('canal-discord', (event, dados) => {
-    if (client.user) { // Verifica se está logado
-        client.user.setActivity({
+    if (client.user) {
+        const agora = Math.floor(Date.now() / 1000); // Segundos atuais
+        const duracao = Math.floor(dados.duration);
+        const tempoAtual = Math.floor(dados.currentTime);
+
+        const atividade = {
             details: dados.title,
             state: `por ${dados.artist}`,
             type: 2,
             largeImageKey: `https://i.pinimg.com/originals/8a/b4/31/8ab431112b123209806680d879cbd26f.gif`,
-            instance: false
-        });
+            instance: false,
+        };
+
+        if (dados.isPaused) {
+            // Se pausar, removemos os timestamps para a barra sumir/parar
+            atividade.smallImageKey = 'pause-icon'; 
+            atividade.smallImageText = 'Pausado';
+            atividade.startTimestamp = agora - tempoAtual;
+            atividade.endTimestamp = undefined; // Sem endTimestamp, a barra de progresso desaparece
+        } else if (duracao > 0) {
+            atividade.smallImageKey = 'play-icon'; 
+            atividade.smallImageText = 'Ouvindo agora';
+            // Cálculo profissional de progresso:
+            // O startTimestamp diz ao Discord quando a música "começou"
+            // Se estou em 10s de música, ela começou (agora - 10s) atrás.
+            atividade.startTimestamp = agora - tempoAtual;
+            atividade.endTimestamp = atividade.startTimestamp + duracao;
+        }
+
+        client.user.setActivity(atividade);
     }
 });
-
 // --- MENU DE CONTEXTO (ATUALIZADO COM PLAYLISTS) ---
 ipcMain.on('show-context-menu', (event, { songId, filePath, playlists, index }) => {
   const template = [
@@ -788,6 +921,21 @@ ipcMain.on('show-context-menu', (event, { songId, filePath, playlists, index }) 
         label: pl.name,
         click: () => { event.sender.send('add-to-playlist', { playlistId: pl.id, songId: songId }); }
       })) : []
+    },
+    {
+      label: 'Baixar Versão em Vídeo',
+      click: () => { 
+        const cleanSongName = path.parse(songId).name; // Remove a extensão para uma busca mais limpa
+        // Aqui você precisaria ter a URL original guardada no objeto da música
+        // Se não tiver, essa opção é melhor usada direto na janela do YouTube Music
+        createYtWindow(cleanSongName);
+
+        if (YtWindow) {
+        YtWindow.webContents.on('did-finish-load', () => {
+            YtWindow.webContents.send('target-filename', songId);
+        });
+    }
+      }
     },
     { type: 'separator' },
     {

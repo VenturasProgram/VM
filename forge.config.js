@@ -56,6 +56,11 @@ module.exports = {
             target: 'preload',
           },
           {
+            entry: 'src/Copy Youtube.js',
+            config: 'vite.copy.config.mjs',
+            target: 'preload',
+          },
+          {
             entry: 'download-status.html',
             config: 'vite.download.config.mjs',
             target: 'preload',

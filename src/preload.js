@@ -24,12 +24,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('add-to-playlist', (_event, data) => callback(data));
 },
 
-  onMenuPlay:(callback) => ipcRenderer.on('menu-play-song', (event, index) => callback(index)),
+  onMenuPlay: (callback) => {
+      const subscription = (event, ...args) => callback(...args);
+      ipcRenderer.on('menu-play-song', subscription);
+
+      // Retorna uma função de limpeza
+      return () => {
+          ipcRenderer.removeListener('menu-play-song', subscription);
+      };
+  },
   onUpdateCss: (callback) => ipcRenderer.on('update-user-css', (event, css) => callback(css)),
   openYoutubeMusic: () => ipcRenderer.invoke('Youtube-Music'),
 
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (event, value) => callback(value)),
-  onDownloadFinalizado: (callback) => ipcRenderer.on('download-finalizado', (event) => callback())
+  onDownloadFinalizado: (callback) => ipcRenderer.on('download-finalizado', (event) => callback()),
+  startVideoDownload: (url) => ipcRenderer.invoke('download-video', url)
 });
