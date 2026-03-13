@@ -40,5 +40,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   close: () => ipcRenderer.send('window-close'),
   onDownloadProgress: (callback) => ipcRenderer.on('download-progress', (event, value) => callback(value)),
   onDownloadFinalizado: (callback) => ipcRenderer.on('download-finalizado', (event) => callback()),
-  startVideoDownload: (url) => ipcRenderer.invoke('download-video', url)
+  startVideoDownload: (url) => ipcRenderer.invoke('download-video', url),
+  send: (channel, data) => ipcRenderer.send(channel, data),
+  // Receber dados do Main (O que estava faltando)
+  on: (channel, callback) => {
+    const subscription = (event, ...args) => callback(...args);
+    ipcRenderer.on(channel, subscription);
+
+    // Retorna uma função para remover o listener (importante para o React)
+    return () => ipcRenderer.removeListener(channel, subscription);
+  },
 });

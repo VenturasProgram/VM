@@ -3,6 +3,7 @@ import { Library } from '../Library/Library'
 import { Player } from '../Player/Player'
 import { Downloader } from '../Downloader/Downloader'
 import { WindowControls } from '../controls_page/controls'
+import Swal from 'sweetalert2';
 
 const sanitizeFileName = (name) => {
     if (!name) return "";
@@ -39,15 +40,46 @@ export const Center = () => {
         });
     }, []);
     useEffect(() => {
-        // Escuta o aviso de que a biblioteca mudou (novo download concluído)
-        const unsubscribe = window.electronAPI.onLibraryUpdated(() => {
-            console.log("Biblioteca atualizada! Recarregando dados...");
-            refreshLibrary();
+        const removeListener = window.electronAPI.on('request-offset-input', async (data) => {
+            const { songId, currentOffset } = data;
+
+            const { value: seconds } = await Swal.fire({
+                title: 'Sincronização de Vídeo',
+                text: `Ajuste o tempo para: ${songId}`,
+                input: 'number',
+                inputLabel: 'Segundos (Ex: 10 para pular anúncio, -5 para atrasar vídeo)',
+                inputValue: currentOffset,
+                showCancelButton: true,
+                confirmButtonText: 'Salvar',
+                cancelButtonText: 'Cancelar',
+                background: '#1e1e1e', // Cor escura para combinar com seu player
+                color: '#fff',
+                inputAttributes: {
+                    step: '0.1'
+                }
+            });
+
+            if (seconds !== undefined && seconds !== null) {
+                window.electronAPI.send('save-song-offset', { 
+                    songId, 
+                    seconds: parseFloat(seconds) 
+                });
+                
+                // Feedback visual de sucesso
+                Swal.fire({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'success',
+                    title: 'Sincronia salva!',
+                    showConfirmButton: false,
+                    timer: 2000,
+                    background: '#28a745',
+                    color: '#fff'
+                });
+            }
         });
 
-        refreshLibrary(); // Carga inicial
-
-        return () => unsubscribe(); // Limpa o listener ao fechar o componente
+        return () => removeListener();
     }, []);
     const refreshLibrary = async () => {
         const data = await window.electronAPI.getLibrary();
@@ -138,28 +170,39 @@ export const Center = () => {
     }, [currentVideo]); // Toda vez que o path do vídeo deixar de ser null, isso dispara
     useEffect(() => {
         const videoElement = videoRef.current;
-        if (!videoElement) return;
+        if (!videoElement || currentIndex === null) return;
 
         if (PlayerActive) {
-            // Sincroniza o tempo antes de dar o play
-            videoElement.currentTime = currentTime;
+            const offset = songs[currentIndex]?.offset || 0;
+            
+            // Sincroniza o tempo inicial considerando o offset
+            videoElement.currentTime = Math.max(0, currentTime + offset);
+            
             videoElement.play().catch(err => {
-                console.warn("Autoplay impedido:", err);
+                console.warn("Autoplay impedido ou erro no vídeo:", err);
             });
         } else {
             videoElement.pause();
         }
-    }, [PlayerActive, currentVideo]);
+    }, [PlayerActive, currentVideo, currentIndex]);
 
     useEffect(() => {
-        if (videoRef.current && PlayerActive) {
-            // Sincronização contínua leve: 
-            // Só ajusta se a diferença for maior que 0.3 segundos para evitar "engasgos"
-            if (Math.abs(videoRef.current.currentTime - currentTime) > 0.3) {
-                videoRef.current.currentTime = currentTime;
+        if (videoRef.current && PlayerActive && currentIndex !== null) {
+            // Pegamos o offset da música atual (se não existir, é 0)
+            const currentSong = songs[currentIndex];
+            const offset = currentSong?.offset || 0;
+            
+            // O tempo alvo do vídeo é o tempo da música + o ajuste
+            const targetVideoTime = currentTime + offset;
+
+            // Só sincroniza se a diferença for maior que 0.5s para evitar "stuttering"
+            // Também verificamos se o tempo alvo não ultrapassa a duração do vídeo
+            if (Math.abs(videoRef.current.currentTime - targetVideoTime) > 0.5) {
+                // Garante que o tempo não seja negativo
+                videoRef.current.currentTime = Math.max(0, targetVideoTime);
             }
         }
-    }, [currentTime]);
+    }, [currentTime, PlayerActive, currentIndex, songs]);
     return (
         <>
         <style>{userCss}</style>

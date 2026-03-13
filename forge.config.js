@@ -64,7 +64,12 @@ module.exports = {
             entry: 'download-status.html',
             config: 'vite.download.config.mjs',
             target: 'preload',
-          }
+          },
+          {
+            entry: 'src/index.css',
+            config: 'vite.copy.config.mjs',
+            target: 'preload',
+          },
         ],
         renderer: [
           {
